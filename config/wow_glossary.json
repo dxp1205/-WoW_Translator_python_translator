@@ -1,0 +1,13 @@
+﻿{
+  "glossary": {
+    "Alliance": "联盟",
+    "Horde": "部落",
+    "raid": "团队副本",
+    "dungeon": "地下城",
+    "tank": "坦克",
+    "healer": "治疗",
+    "dps": "输出",
+    "aggro": "仇恨",
+    "cooldown": "冷却"
+  }
+}
