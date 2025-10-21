@@ -3,3 +3,5 @@ keyboard>=0.13.5
 mss>=7.0.1
 paddleocr>=2.7.0.2
 requests>=2.31
+ctranslate2>=3.24
+sentencepiece>=0.1.99

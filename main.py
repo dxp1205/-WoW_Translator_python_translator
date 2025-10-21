@@ -6,6 +6,7 @@ import logging
 import sys
 import threading
 import time
+from pathlib import Path
 from typing import List, Optional
 
 from PySide6 import QtCore, QtWidgets, QtGui
@@ -15,7 +16,7 @@ from config_manager import ConfigManager, GlossaryManager
 from hotkey_listener import HotkeyListener
 from ocr_manager import OcrController
 from prompt_manager import PromptManager
-from translator import QwenConfig, QwenTranslator
+from translator import LocalOpusConfig, LocalOpusTranslator, QwenConfig, QwenTranslator
 from ui import FloatingPanel, PromptEditor, OcrResultWindow
 
 if sys.platform == "win32":  # pragma: no cover - Windows specific helpers
@@ -43,15 +44,47 @@ class TranslatorController(QtWidgets.QApplication):
         self.prompt_manager = PromptManager(self.cfg)
         self.glossary = GlossaryManager()
 
-        llm_cfg = self.cfg.get_llm_config()
-        self.translator = QwenTranslator(
-            QwenConfig(
-                api_key=str(llm_cfg.get("api_key", "")).strip(),
-                model=str(llm_cfg.get("model", "qwen-turbo") or "qwen-turbo"),
-                max_tokens=int(llm_cfg.get("max_tokens", 300) or 300),
-                temperature=float(llm_cfg.get("temperature", 0.3) or 0.3),
+        provider = self.cfg.get_translator_provider()
+        self._translator_provider = provider
+        if provider == "local_opus":
+            local_cfg = self.cfg.get_local_opus_config()
+            model_dir = str(local_cfg.get("model_dir", "")).strip()
+            if model_dir:
+                resolved = Path(model_dir).expanduser()
+                if not resolved.is_absolute():
+                    resolved = (Path.cwd() / resolved).resolve()
+                try:
+                    self.translator = LocalOpusTranslator(
+                        LocalOpusConfig(
+                            model_dir=str(resolved),
+                            device=str(local_cfg.get("device", "cpu") or "cpu"),
+                            compute_type=str(local_cfg.get("compute_type", "int8") or "int8"),
+                            beam_size=int(local_cfg.get("beam_size", 4) or 4),
+                            source_prefix=str(local_cfg.get("source_prefix", ">>cmn<< ") or ">>cmn<< "),
+                            target_prefix=str(local_cfg.get("target_prefix", "") or ""),
+                            max_decoding_length=int(local_cfg.get("max_decoding_length", 256) or 256),
+                        )
+                    )
+                except Exception as exc:  # pragma: no cover - fallback on failure
+                    logger.warning("Local translator init failed: %s", exc, exc_info=True)
+                    provider = "qwen"
+                    self._translator_provider = provider
+                else:
+                    logger.info("Using local translator at %s", resolved)
+            else:
+                logger.warning("Local translator selected but model_dir is empty, falling back to Qwen API")
+                provider = "qwen"
+                self._translator_provider = provider
+        if provider != "local_opus":
+            llm_cfg = self.cfg.get_llm_config()
+            self.translator = QwenTranslator(
+                QwenConfig(
+                    api_key=str(llm_cfg.get("api_key", "")).strip(),
+                    model=str(llm_cfg.get("model", "qwen-turbo") or "qwen-turbo"),
+                    max_tokens=int(llm_cfg.get("max_tokens", 300) or 300),
+                    temperature=float(llm_cfg.get("temperature", 0.3) or 0.3),
+                )
             )
-        )
 
         self.toggleSessionRequested.connect(self._on_toggle_session)
         self.toggleOcrRequested.connect(self._on_toggle_ocr)

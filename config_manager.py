@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -16,7 +16,16 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
             "model": "qwen-turbo",
             "max_tokens": 300,
             "temperature": 0.3,
-        }
+        },
+        "local_opus": {
+            "model_dir": "",
+            "device": "cpu",
+            "compute_type": "int8",
+            "beam_size": 4,
+            "source_prefix": ">>cmn<< ",
+            "target_prefix": "",
+            "max_decoding_length": 256,
+        },
     },
     "ocr": {
         "detection_interval": 2500,
@@ -25,7 +34,11 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "panel": {
         "position": {"x": 240, "y": 180},
     },
+    "translator": {
+        "provider": "qwen"
+    },
 }
+
 
 DEFAULT_GLOSSARY: Dict[str, str] = {
     "Alliance": "联盟",
@@ -88,6 +101,36 @@ class ConfigManager:
             llm["qwen"] = qwen
         return qwen
 
+    def get_local_opus_config(self) -> Dict[str, Any]:
+        llm = self._settings.setdefault("llm_apis", {})
+        if not isinstance(llm, dict):
+            llm = {}
+            self._settings["llm_apis"] = llm
+        local = llm.setdefault("local_opus", {})
+        if not isinstance(local, dict):
+            local = {}
+            llm["local_opus"] = local
+        return local
+
+    def get_translator_provider(self) -> str:
+        translator = self._settings.setdefault("translator", {})
+        if not isinstance(translator, dict):
+            translator = {"provider": DEFAULT_SETTINGS["translator"]["provider"]}
+            self._settings["translator"] = translator
+        provider = str(translator.get("provider", DEFAULT_SETTINGS["translator"]["provider"]))
+        if provider not in {"qwen", "local_opus"}:
+            provider = DEFAULT_SETTINGS["translator"]["provider"]
+            translator["provider"] = provider
+        return provider
+
+    def set_translator_provider(self, provider: str) -> None:
+        translator = self._settings.setdefault("translator", {})
+        if not isinstance(translator, dict):
+            translator = {}
+            self._settings["translator"] = translator
+        translator["provider"] = provider
+        self.save()
+
     def get_prompt(self) -> str:
         return str(self._settings.get("custom_prompt", ""))
 
@@ -122,6 +165,13 @@ class ConfigManager:
                 llm_cfg[key] = value
                 changed = True
 
+        local_cfg = self.get_local_opus_config()
+        local_defaults = DEFAULT_SETTINGS["llm_apis"]["local_opus"]
+        for key, value in local_defaults.items():
+            if key not in local_cfg:
+                local_cfg[key] = value
+                changed = True
+
         ocr_cfg = self.get_ocr_config()
         if "detection_interval" not in ocr_cfg:
             ocr_cfg["detection_interval"] = DEFAULT_SETTINGS["ocr"]["detection_interval"]
@@ -147,6 +197,14 @@ class ConfigManager:
             if key not in position:
                 position[key] = value
                 changed = True
+        translator_cfg = self._settings.setdefault("translator", {})
+        if not isinstance(translator_cfg, dict):
+            translator_cfg = dict(DEFAULT_SETTINGS["translator"])
+            self._settings["translator"] = translator_cfg
+            changed = True
+        if "provider" not in translator_cfg:
+            translator_cfg["provider"] = DEFAULT_SETTINGS["translator"]["provider"]
+            changed = True
 
         if changed:
             self.save()
