@@ -137,7 +137,8 @@ class TranslatorController(QtWidgets.QApplication):
 
         self.hotkeys = HotkeyListener()
         self.hotkeys.on_toggle_session = lambda: self.toggleSessionRequested.emit()
-        self.hotkeys.on_toggle_ocr = lambda: self.toggleOcrRequested.emit()\n        self.hotkeys.on_toggle_ocr_overlay = lambda: self._on_toggle_ocr_overlay()
+        self.hotkeys.on_toggle_ocr = lambda: self.toggleOcrRequested.emit()
+        self.hotkeys.on_toggle_ocr_overlay = lambda: self._on_toggle_ocr_overlay()
         self.hotkeys.on_show_prompts = lambda: self.showPromptsRequested.emit()
         self.hotkeys.on_submit = lambda text, keep: self.submissionRequested.emit(text, keep)
 
