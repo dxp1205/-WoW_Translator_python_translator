@@ -16,6 +16,7 @@ class HotkeyListener:
 
         self.on_toggle_session: Callable[[], None] | None = None
         self.on_toggle_ocr: Callable[[], None] | None = None
+        self.on_toggle_ocr_overlay: Callable[[], None] | None = None
         self.on_show_prompts: Callable[[], None] | None = None
         self.on_submit: Callable[[str, bool], None] | None = None
 
@@ -47,6 +48,7 @@ class HotkeyListener:
         self._handles = [
             keyboard.add_hotkey("alt+y", self._handle_toggle_session, suppress=True),
             keyboard.add_hotkey("alt+r", self._handle_toggle_ocr, suppress=True),
+            keyboard.add_hotkey("alt+shift+r", self._handle_toggle_ocr_overlay, suppress=True),
             keyboard.add_hotkey("alt+s", self._handle_show_prompts, suppress=True),
             keyboard.add_hotkey("ctrl+alt+y", self._handle_clipboard_submit, suppress=True),
         ]
@@ -66,6 +68,10 @@ class HotkeyListener:
     def _handle_toggle_ocr(self) -> None:
         if self.on_toggle_ocr:
             self.on_toggle_ocr()
+
+    def _handle_toggle_ocr_overlay(self) -> None:
+        if self.on_toggle_ocr_overlay:
+            self.on_toggle_ocr_overlay()
 
     def _handle_show_prompts(self) -> None:
         if self.on_show_prompts:

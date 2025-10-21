@@ -1,4 +1,4 @@
-
+﻿
 from __future__ import annotations
 
 import concurrent.futures
@@ -229,6 +229,7 @@ class OcrController(QtCore.QObject):
         self.selection_overlay: Optional[OcrSelectionOverlay] = None
         self.overlay: Optional[OcrRegionOverlay] = None
 
+        self._pass_through = False
         self.last_text: str = ""
         self._last_translation: str = ""
 
@@ -239,7 +240,7 @@ class OcrController(QtCore.QObject):
         if region and not region.isNull():
             self._activate_with_region(region)
         else:
-            self.statusUpdated.emit("请拖动选择识别区域，右键或 Esc 取消")
+            self.statusUpdated.emit("Drag to select a region; right-click or press Esc to cancel")
             self._show_selection_overlay()
 
     def stop(self) -> None:
@@ -254,9 +255,10 @@ class OcrController(QtCore.QObject):
             self._pending_future = None
         self._timer.stop()
         self._active = False
+        self._pass_through = False
         self._capture_rect = None
         self._capture_token += 1
-        self.statusUpdated.emit("OCR 已关闭")
+        self.statusUpdated.emit("OCR stopped")
 
     def is_active(self) -> bool:
         return self._active
@@ -272,7 +274,23 @@ class OcrController(QtCore.QObject):
 
     def _handle_cancel_selection(self) -> None:
         self.selection_overlay = None
-        self.statusUpdated.emit("OCR 已取消")
+        self.statusUpdated.emit("OCR selection cancelled")
+
+    def toggle_pass_through(self) -> bool:
+        if not self._active or not self._capture_rect:
+            self.statusUpdated.emit("OCR idle. Activate before hiding region.")
+            return self._pass_through
+        self._pass_through = not self._pass_through
+        if self.overlay:
+            self.overlay.set_pass_through(self._pass_through)
+        if self._pass_through:
+            self.statusUpdated.emit("OCR region hidden; overlay is click-through")
+        else:
+            if self.overlay:
+                self.overlay.set_pass_through(False)
+                self.overlay.raise_()
+            self.statusUpdated.emit("OCR region visible; overlay restored")
+        return self._pass_through
 
     def _handle_selection(self, rect: QtCore.QRect) -> None:
         self.selection_overlay = None
@@ -295,8 +313,11 @@ class OcrController(QtCore.QObject):
         overlay.activateWindow()
         self.overlay = overlay
 
+        self._pass_through = False
+        self.overlay.set_pass_through(False)
+
         self._active = True
-        self.statusUpdated.emit("OCR 已开启")
+        self.statusUpdated.emit("OCR active")
         self.last_text = ""
         self._last_translation = ""
         self._timer.start()
@@ -311,7 +332,7 @@ class OcrController(QtCore.QObject):
             self._pending_future = None
         self.last_text = ""
         self._last_translation = ""
-        self.statusUpdated.emit("OCR 区域已更新，重新识别中...")
+        self.statusUpdated.emit("OCR region updated, scanning again...")
         self._timer.start()
         self._tick()
 
@@ -376,9 +397,9 @@ class OcrController(QtCore.QObject):
     @QtCore.Slot(str)
     def _emit_result(self, translation: str) -> None:
         if translation:
-            self.statusUpdated.emit("OCR 已更新")
+            self.statusUpdated.emit("OCR updated")
         else:
-            self.statusUpdated.emit("未识别到文本")
+            self.statusUpdated.emit("No text detected")
         self.textUpdated.emit(self.last_text, translation)
 
     @QtCore.Slot(str)
@@ -508,3 +529,4 @@ class OcrController(QtCore.QObject):
             )
         except (TypeError, ValueError):
             return None
+

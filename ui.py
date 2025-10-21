@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from typing import Optional
 
@@ -251,6 +251,7 @@ class OcrResultWindow(QtWidgets.QWidget):
         self._drag_offset = QtCore.QPoint()
         self._last_translation = ''
         self._last_status = ''
+        self._pass_through = False
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -268,7 +269,7 @@ class OcrResultWindow(QtWidgets.QWidget):
         outer.addWidget(self._frame)
 
         layout = QtWidgets.QVBoxLayout(self._frame)
-        layout.setContentsMargins(18, 12, 18, 12)
+        layout.setContentsMargins(12, 8, 12, 10)
         layout.setSpacing(8)
 
         self._drag_handle = QtWidgets.QWidget()
@@ -279,6 +280,7 @@ class OcrResultWindow(QtWidgets.QWidget):
 
         self.translationView = QtWidgets.QTextBrowser()
         self.translationView.setOpenExternalLinks(False)
+        self.translationView.document().setDocumentMargin(6)
         self.translationView.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.translationView.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.translationView.setFrameStyle(QtWidgets.QFrame.NoFrame)
@@ -314,6 +316,8 @@ class OcrResultWindow(QtWidgets.QWidget):
         self._last_status = text
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:  # type: ignore[override]
+        if self._pass_through:
+            return False
         if isinstance(event, QtGui.QMouseEvent):
             if event.type() == QtCore.QEvent.MouseButtonPress and event.button() == QtCore.Qt.LeftButton:
                 if obj in (self._drag_handle, self._frame) or (
@@ -332,6 +336,21 @@ class OcrResultWindow(QtWidgets.QWidget):
                 self._dragging = False
                 return True
         return super().eventFilter(obj, event)
+
+    def set_pass_through(self, enabled: bool) -> None:
+        self._pass_through = enabled
+        self.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, enabled)
+        if hasattr(QtCore.Qt, 'WindowTransparentForInput'):
+            self.setWindowFlag(QtCore.Qt.WindowTransparentForInput, enabled)
+            self.show()
+        for widget in (self._frame, self.translationView, self.translationView.viewport()):
+            widget.setAttribute(QtCore.Qt.WA_TransparentForMouseEvents, enabled)
+        flags = QtCore.Qt.NoTextInteraction if enabled else QtCore.Qt.TextSelectableByMouse
+        self.translationView.setTextInteractionFlags(flags)
+        self._drag_handle.setVisible(not enabled)
+        self._resize_handle.setEnabled(not enabled)
+        self._resize_handle.setVisible(not enabled)
+        self.setFocusPolicy(QtCore.Qt.NoFocus if enabled else QtCore.Qt.StrongFocus)
 
     def _begin_drag(self, event: QtGui.QMouseEvent) -> None:
         self._dragging = True
@@ -449,3 +468,10 @@ class OcrRegionOverlay(QtWidgets.QWidget):
             self._resize_anchor = global_pos
             self.setGeometry(new_rect)
             self.regionChanged.emit(new_rect)
+
+    def set_pass_through(self, enabled: bool) -> None:
+        if enabled:
+            self.hide()
+        else:
+            self.show()
+            self.raise_()

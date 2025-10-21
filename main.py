@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import argparse
 import concurrent.futures
@@ -137,7 +137,7 @@ class TranslatorController(QtWidgets.QApplication):
 
         self.hotkeys = HotkeyListener()
         self.hotkeys.on_toggle_session = lambda: self.toggleSessionRequested.emit()
-        self.hotkeys.on_toggle_ocr = lambda: self.toggleOcrRequested.emit()
+        self.hotkeys.on_toggle_ocr = lambda: self.toggleOcrRequested.emit()\n        self.hotkeys.on_toggle_ocr_overlay = lambda: self._on_toggle_ocr_overlay()
         self.hotkeys.on_show_prompts = lambda: self.showPromptsRequested.emit()
         self.hotkeys.on_submit = lambda text, keep: self.submissionRequested.emit(text, keep)
 
@@ -229,18 +229,33 @@ class TranslatorController(QtWidgets.QApplication):
     @QtCore.Slot()
     def _on_toggle_ocr(self) -> None:
         if not self.ocr:
-            self.ocr_window.update_status("OCR 未启用")
+            self.ocr_window.update_status("OCR unavailable")
             return
         if self.ocr.is_active():
+            self.ocr_window.set_pass_through(False)
             self.ocr.stop()
-            self.ocr_window.update_status("OCR 已关闭")
+            self.ocr_window.update_status("OCR stopped")
             self.ocr_window.hide()
         else:
-            self.ocr_window.update_status("请拖动选择识别区域")
+            self.ocr_window.update_status("Drag to select capture region")
+            self.ocr_window.set_pass_through(False)
             self.ocr_window.show()
             self.ocr_window.raise_()
             self.ocr_window.activateWindow()
             self.ocr.start()
+
+    @QtCore.Slot()
+    def _on_toggle_ocr_overlay(self) -> None:
+        if not self.ocr or not self.ocr.is_active():
+            self.ocr_window.update_status("OCR unavailable")
+            return
+        state = self.ocr.toggle_pass_through()
+        self.ocr_window.set_pass_through(state)
+        if state:
+            self.ocr_window.update_status("Overlay hidden; windows are click-through")
+        else:
+            self.ocr_window.update_status("Overlay restored; windows interactive")
+            self.ocr_window.raise_()
 
     @QtCore.Slot()
     def _on_show_prompt_settings(self) -> None:
