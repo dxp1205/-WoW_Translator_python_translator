@@ -4,6 +4,7 @@ from __future__ import annotations
 import concurrent.futures
 from pathlib import Path
 from typing import Optional, Tuple
+import hashlib
 
 import re
 
@@ -230,6 +231,7 @@ class OcrController(QtCore.QObject):
         self.overlay: Optional[OcrRegionOverlay] = None
 
         self._pass_through = False
+        self._last_capture_sig: Optional[str] = None
         self.last_text: str = ""
         self._last_translation: str = ""
 
@@ -240,7 +242,7 @@ class OcrController(QtCore.QObject):
         if region and not region.isNull():
             self._activate_with_region(region)
         else:
-            self.statusUpdated.emit("Drag to select a region; right-click or press Esc to cancel")
+            self.statusUpdated.emit("请拖拽选择识别区域（右键或 Esc 取消）")
             self._show_selection_overlay()
 
     def stop(self) -> None:
@@ -256,9 +258,10 @@ class OcrController(QtCore.QObject):
         self._timer.stop()
         self._active = False
         self._pass_through = False
+        self._last_capture_sig = None
         self._capture_rect = None
         self._capture_token += 1
-        self.statusUpdated.emit("OCR stopped")
+        self.statusUpdated.emit("OCR 已停止")
 
     def is_active(self) -> bool:
         return self._active
@@ -274,12 +277,27 @@ class OcrController(QtCore.QObject):
 
     def _handle_cancel_selection(self) -> None:
         self.selection_overlay = None
-        self.statusUpdated.emit("OCR selection cancelled")
+        self.statusUpdated.emit("已取消选择")
 
     def toggle_pass_through(self) -> bool:
         if not self._active or not self._capture_rect:
-            self.statusUpdated.emit("OCR idle. Activate before hiding region.")
+            self.statusUpdated.emit("OCR 未启动，无法隐藏区域")
             return self._pass_through
+        self._pass_through = not self._pass_through
+        if self.overlay:
+            self.overlay.set_pass_through(self._pass_through)
+        if self._pass_through:
+            self._timer.stop()
+            self.statusUpdated.emit("识别区域已隐藏，窗口可穿透操作")
+        else:
+            self._last_capture_sig = None
+            if self._active:
+                self._timer.start()
+                self._tick()
+            self.statusUpdated.emit("识别区域已恢复，可继续拖动调整")
+            if self.overlay:
+                self.overlay.raise_()
+        return self._pass_through
         self._pass_through = not self._pass_through
         if self.overlay:
             self.overlay.set_pass_through(self._pass_through)
@@ -314,6 +332,10 @@ class OcrController(QtCore.QObject):
         self.overlay = overlay
 
         self._pass_through = False
+        self._last_capture_sig = None
+        self.overlay.set_pass_through(False)
+
+        self._pass_through = False
         self.overlay.set_pass_through(False)
 
         self._active = True
@@ -332,11 +354,14 @@ class OcrController(QtCore.QObject):
             self._pending_future = None
         self.last_text = ""
         self._last_translation = ""
-        self.statusUpdated.emit("OCR region updated, scanning again...")
+        self._last_capture_sig = None
+        self.statusUpdated.emit("识别区域已更新，重新识别中…")
         self._timer.start()
         self._tick()
 
     def _tick(self) -> None:
+        if self._pass_through:
+            return
         if not self._capture_rect or self._pending_future is not None:
             return
         path = self._capture(self._capture_rect)
@@ -397,9 +422,9 @@ class OcrController(QtCore.QObject):
     @QtCore.Slot(str)
     def _emit_result(self, translation: str) -> None:
         if translation:
-            self.statusUpdated.emit("OCR updated")
+            self.statusUpdated.emit("OCR 已刷新")
         else:
-            self.statusUpdated.emit("No text detected")
+            self.statusUpdated.emit("未检测到文本")
         self.textUpdated.emit(self.last_text, translation)
 
     @QtCore.Slot(str)
@@ -464,13 +489,19 @@ class OcrController(QtCore.QObject):
             output_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
             return None
-        file_path = output_dir / f"wow_translator_{QtCore.QDateTime.currentMSecsSinceEpoch()}.png"
         try:
             with mss.mss() as grabber:
                 shot = grabber.grab(monitor)
-                tools.to_png(shot.rgb, shot.size, output=str(file_path))
         except mss.exception.ScreenShotError:
             return None
+
+        signature = hashlib.md5(shot.rgb).hexdigest()
+        if signature == self._last_capture_sig:
+            return None
+        self._last_capture_sig = signature
+
+        file_path = output_dir / f"wow_translator_{QtCore.QDateTime.currentMSecsSinceEpoch()}\.png"
+        tools.to_png(shot.rgb, shot.size, output=str(file_path))
         return str(file_path)
 
     def _rect_to_monitor(self, rect: QtCore.QRect) -> Optional[dict[str, int]]:

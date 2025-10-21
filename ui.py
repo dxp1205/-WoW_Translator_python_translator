@@ -261,19 +261,19 @@ class OcrResultWindow(QtWidgets.QWidget):
         self._frame.setObjectName('ocrResultFrame')
         self._frame.setStyleSheet(
             "#ocrResultFrame {"
-            "  background-color: rgba(14, 17, 24, 0.6);"
-            "  border-radius: 16px;"
-            "  border: 1px solid rgba(255, 255, 255, 0.08);"
+            "  background-color: rgba(12, 14, 20, 0.52);"
+            "  border-radius: 12px;"
+            "  border: 1px solid rgba(255, 255, 255, 0.06);"
             "}"
         )
         outer.addWidget(self._frame)
 
         layout = QtWidgets.QVBoxLayout(self._frame)
-        layout.setContentsMargins(12, 8, 12, 10)
+        layout.setContentsMargins(8, 6, 8, 8)
         layout.setSpacing(8)
 
         self._drag_handle = QtWidgets.QWidget()
-        self._drag_handle.setFixedHeight(6)
+        self._drag_handle.setFixedHeight(4)
         self._drag_handle.setCursor(QtCore.Qt.SizeAllCursor)
         self._drag_handle.setStyleSheet('background: transparent;')
         layout.addWidget(self._drag_handle)
@@ -289,9 +289,9 @@ class OcrResultWindow(QtWidgets.QWidget):
             "  background: transparent;"
             "  color: rgba(255,255,255,0.92);"
             "  border: none;"
-            "  font-size: 14px;"
-            "  line-height: 1.42;"
-            "  letter-spacing: 0.3px;"
+            "  font-size: 13px;"
+            "  line-height: 1.35;"
+            "  letter-spacing: 0.2px;"
             "}"
         )
         self.translationView.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)

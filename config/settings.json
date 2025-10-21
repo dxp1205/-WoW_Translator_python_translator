@@ -1,4 +1,4 @@
-{
+﻿{
   "custom_prompt": "你是一个专业的魔兽世界本地化翻译助手。这些文本来自游戏内聊天、组队与副本频道，常含职业缩写、装备名称与战术术语，请结合魔兽世界背景和常见缩写做出自然、准确的中文翻译，保留关键专有名词。请直接输出译文，不要添加任何解释或额外内容。文本内容：{text}",
   "llm_apis": {
     "qwen": {
@@ -8,20 +8,20 @@
       "temperature": 0.3
     },
     "local_opus": {
-      "model_dir": "models/opus_mt_en_zh_ct2",
+      "model_dir": "",
       "device": "cpu",
       "compute_type": "int8",
       "beam_size": 4,
-      "max_decoding_length": 256,
       "source_prefix": ">>cmn<< ",
-      "target_prefix": ""
+      "target_prefix": "",
+      "max_decoding_length": 256
     }
   },
   "ocr": {
-    "detection_interval": 2500,
+    "detection_interval": 3500,
     "region": {
-      "x": 43,
-      "y": 828,
+      "x": 37,
+      "y": 830,
       "width": 552,
       "height": 150
     }
@@ -33,6 +33,6 @@
     }
   },
   "translator": {
-    "provider": "local_opus"
+    "provider": "qwen"
   }
 }

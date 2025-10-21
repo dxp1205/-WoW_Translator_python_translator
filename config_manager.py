@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -28,7 +28,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
         },
     },
     "ocr": {
-        "detection_interval": 2500,
+        "detection_interval": 3500,
         "region": {"x": 320, "y": 220, "width": 420, "height": 210},
     },
     "panel": {
