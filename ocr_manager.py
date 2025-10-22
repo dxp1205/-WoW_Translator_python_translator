@@ -473,7 +473,7 @@ class OcrController(QtCore.QObject):
             output_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
             return None
-        file_path = output_dir / f"wow_translator_{QtCore.QDateTime.currentMSecsSinceEpoch()}\.png"
+        file_path = output_dir / f"wow_translator_{QtCore.QDateTime.currentMSecsSinceEpoch()}.png"
         try:
             with mss.mss() as grabber:
                 shot = grabber.grab(monitor)
