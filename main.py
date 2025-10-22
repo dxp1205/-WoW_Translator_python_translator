@@ -230,15 +230,15 @@ class TranslatorController(QtWidgets.QApplication):
     @QtCore.Slot()
     def _on_toggle_ocr(self) -> None:
         if not self.ocr:
-            self.ocr_window.update_status("OCR 未启用")
+            self.ocr_window.update_status("OCR unavailable")
             return
         if self.ocr.is_active():
             self.ocr_window.set_pass_through(False)
             self.ocr.stop()
-            self.ocr_window.update_status("OCR 已关闭")
+            self.ocr_window.update_status("OCR stopped")
             self.ocr_window.hide()
         else:
-            self.ocr_window.update_status("请拖拽选择识别区域")
+            self.ocr_window.update_status("Drag to select capture region")
             self.ocr_window.set_pass_through(False)
             self.ocr_window.show()
             self.ocr_window.raise_()
@@ -248,14 +248,14 @@ class TranslatorController(QtWidgets.QApplication):
     @QtCore.Slot()
     def _on_toggle_ocr_overlay(self) -> None:
         if not self.ocr or not self.ocr.is_active():
-            self.ocr_window.update_status("OCR 未启用")
+            self.ocr_window.update_status("OCR unavailable")
             return
         state = self.ocr.toggle_pass_through()
         self.ocr_window.set_pass_through(state)
         if state:
-            self.ocr_window.update_status("识别窗口已隐藏，可直接操作游戏")
+            self.ocr_window.update_status("Overlay hidden; windows are click-through")
         else:
-            self.ocr_window.update_status("识别窗口已恢复，可继续调整")
+            self.ocr_window.update_status("Overlay restored; windows interactive")
             self.ocr_window.raise_()
 
     @QtCore.Slot()

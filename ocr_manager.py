@@ -275,23 +275,23 @@ class OcrController(QtCore.QObject):
 
     def _handle_cancel_selection(self) -> None:
         self.selection_overlay = None
-        self.statusUpdated.emit("已取消选择")
+        self.statusUpdated.emit("Selection cancelled")
 
     def toggle_pass_through(self) -> bool:
         if not self._active or not self._capture_rect:
-            self.statusUpdated.emit("OCR 未启动，无法隐藏区域")
+            self.statusUpdated.emit("OCR inactive; cannot hide region")
             return self._pass_through
         self._pass_through = not self._pass_through
         if self.overlay:
             self.overlay.set_pass_through(self._pass_through)
         if self._pass_through:
             self._timer.stop()
-            self.statusUpdated.emit("识别窗口已隐藏，可直接操作游戏")
+            self.statusUpdated.emit("Overlay hidden; windows are click-through")
         else:
             if self._active:
                 self._timer.start()
                 self._tick()
-            self.statusUpdated.emit("识别窗口已恢复，可继续调整")
+            self.statusUpdated.emit("Overlay restored; windows interactive")
             if self.overlay:
                 self.overlay.raise_()
         return self._pass_through
