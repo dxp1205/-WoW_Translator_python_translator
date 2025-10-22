@@ -141,6 +141,7 @@ class TranslatorController(QtWidgets.QApplication):
         self.hotkeys.on_toggle_ocr_overlay = lambda: self._on_toggle_ocr_overlay()
         self.hotkeys.on_show_prompts = lambda: self.showPromptsRequested.emit()
         self.hotkeys.on_submit = lambda text, keep: self.submissionRequested.emit(text, keep)
+        self.hotkeys.on_shutdown = lambda: QtCore.QMetaObject.invokeMethod(self, "quit", QtCore.Qt.QueuedConnection)
 
         if not self._hotkeys_disabled:
             self.hotkeys.start()
