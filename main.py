@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from PySide6 import QtCore, QtWidgets, QtGui
 import keyboard
@@ -102,8 +102,28 @@ class TranslatorController(QtWidgets.QApplication):
         self.panel.textEdited.connect(self._handle_text_edited)
         self.panel.panelMoved.connect(self._handle_panel_moved)
 
-        self.ocr_window = OcrResultWindow()
+        ocr_window_cfg = self.cfg.get_ocr_window_config()
+
+        def _safe_int(value: Any, default: int) -> int:
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return default
+
+        pos_cfg = ocr_window_cfg.get("position", {}) if isinstance(ocr_window_cfg, dict) else {}
+        size_cfg = ocr_window_cfg.get("size", {}) if isinstance(ocr_window_cfg, dict) else {}
+        x = _safe_int(pos_cfg.get("x"), 360)
+        y = _safe_int(pos_cfg.get("y"), 260)
+        width = max(_safe_int(size_cfg.get("width"), 360), 280)
+        height = max(_safe_int(size_cfg.get("height"), 200), 140)
+        self.ocr_window = OcrResultWindow(QtCore.QRect(x, y, width, height))
         self.ocr_window.hide()
+
+        self._ocr_window_geometry_timer = QtCore.QTimer()
+        self._ocr_window_geometry_timer.setSingleShot(True)
+        self._ocr_window_geometry_timer.timeout.connect(self._persist_ocr_window_geometry)
+        self._pending_ocr_geometry: Optional[QtCore.QRect] = None
+        self.ocr_window.geometryUpdated.connect(self._schedule_ocr_window_geometry_save)
 
         self._session_active = False
         self._previous_hwnd: Optional[int] = None
@@ -141,7 +161,6 @@ class TranslatorController(QtWidgets.QApplication):
         self.hotkeys.on_toggle_ocr_overlay = lambda: self._on_toggle_ocr_overlay()
         self.hotkeys.on_show_prompts = lambda: self.showPromptsRequested.emit()
         self.hotkeys.on_submit = lambda text, keep: self.submissionRequested.emit(text, keep)
-        self.hotkeys.on_shutdown = lambda: QtCore.QMetaObject.invokeMethod(self, "quit", QtCore.Qt.QueuedConnection)
 
         if not self._hotkeys_disabled:
             self.hotkeys.start()
@@ -370,6 +389,26 @@ class TranslatorController(QtWidgets.QApplication):
             "y": int(self._pending_panel_pos.y()),
         }
         self.cfg.save()
+
+    @QtCore.Slot(QtCore.QRect)
+    def _schedule_ocr_window_geometry_save(self, rect: QtCore.QRect) -> None:
+        if self._ocr_window_geometry_timer.isActive():
+            self._ocr_window_geometry_timer.stop()
+        self._pending_ocr_geometry = QtCore.QRect(rect)
+        self._ocr_window_geometry_timer.start(400)
+
+    def _persist_ocr_window_geometry(self) -> None:
+        if self._pending_ocr_geometry is None:
+            return
+        rect = self._pending_ocr_geometry
+        config = self.cfg.get_ocr_window_config()
+        config["position"] = {"x": int(rect.x()), "y": int(rect.y())}
+        config["size"] = {
+            "width": max(int(rect.width()), self.ocr_window.minimumWidth()),
+            "height": max(int(rect.height()), self.ocr_window.minimumHeight()),
+        }
+        self.cfg.save()
+        self._pending_ocr_geometry = None
 
     def _translate_text(self, text: str) -> str:
         context = self.ocr.last_text if self.ocr else ""

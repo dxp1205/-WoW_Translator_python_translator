@@ -12,7 +12,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "custom_prompt": "",
     "llm_apis": {
         "qwen": {
-            "api_key": "",
+            "api_key": "sk-e447bd896e2340208b21ab5c858835c6",
             "model": "qwen-turbo",
             "max_tokens": 300,
             "temperature": 0.3,
@@ -33,6 +33,10 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     },
     "panel": {
         "position": {"x": 240, "y": 180},
+    },
+    "ocr_window": {
+        "position": {"x": 360, "y": 260},
+        "size": {"width": 360, "height": 220},
     },
     "translator": {
         "provider": "qwen"
@@ -152,6 +156,13 @@ class ConfigManager:
             self._settings["panel"] = panel
         return panel
 
+    def get_ocr_window_config(self) -> Dict[str, Any]:
+        window = self._settings.setdefault("ocr_window", {})
+        if not isinstance(window, dict):
+            window = {}
+            self._settings["ocr_window"] = window
+        return window
+
     def _apply_defaults(self) -> None:
         changed = False
         if "custom_prompt" not in self._settings:
@@ -197,6 +208,27 @@ class ConfigManager:
             if key not in position:
                 position[key] = value
                 changed = True
+
+        ocr_window_cfg = self.get_ocr_window_config()
+        default_window = DEFAULT_SETTINGS["ocr_window"]
+        win_position = ocr_window_cfg.setdefault("position", {})
+        if not isinstance(win_position, dict):
+            win_position = {}
+            ocr_window_cfg["position"] = win_position
+            changed = True
+        for key, value in default_window["position"].items():
+            if key not in win_position:
+                win_position[key] = value
+                changed = True
+        win_size = ocr_window_cfg.setdefault("size", {})
+        if not isinstance(win_size, dict):
+            win_size = {}
+            ocr_window_cfg["size"] = win_size
+            changed = True
+        for key, value in default_window["size"].items():
+            if key not in win_size:
+                win_size[key] = value
+                changed = True
         translator_cfg = self._settings.setdefault("translator", {})
         if not isinstance(translator_cfg, dict):
             translator_cfg = dict(DEFAULT_SETTINGS["translator"])
@@ -221,13 +253,14 @@ class GlossaryManager:
         else:
             merged = dict(DEFAULT_GLOSSARY)
         self._terms: Dict[str, str] = merged
+        self._sorted_terms = sorted(self._terms.items(), key=lambda kv: len(kv[0]), reverse=True)
         if not GLOSSARY_PATH.exists() or not isinstance(glossary, dict):
             save_json(GLOSSARY_PATH, {"glossary": self._terms})
 
     def translate(self, text: str, focus: str | None = None) -> str:
         result = text
         focus_lower = focus.lower() if focus else None
-        for english, chinese in self._terms.items():
+        for english, chinese in self._sorted_terms:
             key = english.strip()
             if not key:
                 continue

@@ -191,24 +191,24 @@ class OcrResizeHandle(QtWidgets.QWidget):
         self._dragging = False
         self._press_pos = QtCore.QPoint()
         self._start_size = QtCore.QSize()
-        self.setFixedSize(22, 22)
+        self.setFixedSize(18, 18)
         self.setCursor(QtCore.Qt.SizeFDiagCursor)
-        self.setAttribute(QtCore.Qt.WA_Hover)
+        self.setAttribute(QtCore.Qt.WA_Hover, True)
 
     def paintEvent(self, event: QtGui.QPaintEvent) -> None:  # type: ignore[override]
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         rect = self.rect().adjusted(2, 2, -2, -2)
-        painter.setBrush(QtGui.QColor(255, 255, 255, 28))
+        painter.setBrush(QtGui.QColor(255, 255, 255, 26))
         painter.setPen(QtCore.Qt.NoPen)
-        painter.drawRoundedRect(rect, 6, 6)
-        pen = QtGui.QPen(QtGui.QColor(134, 168, 255, 210))
+        painter.drawRoundedRect(rect, 5, 5)
+        pen = QtGui.QPen(QtGui.QColor(134, 168, 255, 220))
         pen.setWidth(2)
         painter.setPen(pen)
         right = rect.right()
         bottom = rect.bottom()
-        painter.drawLine(right - 12, bottom - 4, right - 4, bottom - 12)
-        painter.drawLine(right - 16, bottom - 4, right - 4, bottom - 16)
+        painter.drawLine(right - 11, bottom - 4, right - 4, bottom - 11)
+        painter.drawLine(right - 15, bottom - 4, right - 4, bottom - 15)
 
     def _global_pos(self, event: QtGui.QMouseEvent) -> QtCore.QPoint:
         return event.globalPosition().toPoint() if hasattr(event, "globalPosition") else event.globalPos()
@@ -235,23 +235,29 @@ class OcrResizeHandle(QtWidgets.QWidget):
     def mouseReleaseEvent(self, event: QtGui.QMouseEvent) -> None:  # type: ignore[override]
         if event.button() == QtCore.Qt.LeftButton and self._dragging:
             self._dragging = False
+            handler = getattr(self._window, "_emit_geometry", None)
+            if callable(handler):
+                handler()
             event.accept()
         else:
             super().mouseReleaseEvent(event)
 
 
 class OcrResultWindow(QtWidgets.QWidget):
-    def __init__(self) -> None:
+    geometryUpdated = QtCore.Signal(QtCore.QRect)
+
+    def __init__(self, initial_geometry: QtCore.QRect | None = None) -> None:
         super().__init__(None, QtCore.Qt.Window | QtCore.Qt.FramelessWindowHint | QtCore.Qt.Tool)
         self.setWindowFlag(QtCore.Qt.WindowStaysOnTopHint, True)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground)
-        self.setMinimumSize(320, 160)
+        self.setMinimumSize(280, 140)
 
         self._dragging = False
         self._drag_offset = QtCore.QPoint()
-        self._last_translation = ''
-        self._last_status = ''
+        self._last_translation = ""
+        self._last_status = ""
         self._pass_through = False
+        self._suppress_emit = False
 
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -261,26 +267,26 @@ class OcrResultWindow(QtWidgets.QWidget):
         self._frame.setObjectName('ocrResultFrame')
         self._frame.setStyleSheet(
             "#ocrResultFrame {"
-            "  background-color: rgba(12, 14, 20, 0.52);"
-            "  border-radius: 12px;"
-            "  border: 1px solid rgba(255, 255, 255, 0.06);"
+            "  background-color: rgba(12, 14, 20, 0.58);"
+            "  border-radius: 10px;"
+            "  border: 1px solid rgba(255, 255, 255, 0.08);"
             "}"
         )
         outer.addWidget(self._frame)
 
         layout = QtWidgets.QVBoxLayout(self._frame)
-        layout.setContentsMargins(8, 6, 8, 8)
-        layout.setSpacing(8)
+        layout.setContentsMargins(10, 6, 10, 8)
+        layout.setSpacing(6)
 
         self._drag_handle = QtWidgets.QWidget()
-        self._drag_handle.setFixedHeight(4)
+        self._drag_handle.setFixedHeight(3)
         self._drag_handle.setCursor(QtCore.Qt.SizeAllCursor)
         self._drag_handle.setStyleSheet('background: transparent;')
         layout.addWidget(self._drag_handle)
 
         self.translationView = QtWidgets.QTextBrowser()
         self.translationView.setOpenExternalLinks(False)
-        self.translationView.document().setDocumentMargin(6)
+        self.translationView.document().setDocumentMargin(4)
         self.translationView.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.translationView.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         self.translationView.setFrameStyle(QtWidgets.QFrame.NoFrame)
@@ -289,8 +295,8 @@ class OcrResultWindow(QtWidgets.QWidget):
             "  background: transparent;"
             "  color: rgba(255,255,255,0.92);"
             "  border: none;"
-            "  font-size: 13px;"
-            "  line-height: 1.35;"
+            "  font-size: 12px;"
+            "  line-height: 1.32;"
             "  letter-spacing: 0.2px;"
             "}"
         )
@@ -298,6 +304,8 @@ class OcrResultWindow(QtWidgets.QWidget):
         layout.addWidget(self.translationView, 1)
 
         size_row = QtWidgets.QHBoxLayout()
+        size_row.setContentsMargins(0, 0, 0, 0)
+        size_row.setSpacing(0)
         size_row.addStretch()
         self._resize_handle = OcrResizeHandle(self)
         size_row.addWidget(self._resize_handle, 0, QtCore.Qt.AlignRight | QtCore.Qt.AlignBottom)
@@ -306,6 +314,17 @@ class OcrResultWindow(QtWidgets.QWidget):
         self._drag_handle.installEventFilter(self)
         self._frame.installEventFilter(self)
         self.translationView.viewport().installEventFilter(self)
+
+        if initial_geometry is not None:
+            self.apply_saved_geometry(initial_geometry)
+
+    def apply_saved_geometry(self, rect: QtCore.QRect) -> None:
+        self._suppress_emit = True
+        width = max(rect.width(), self.minimumWidth())
+        height = max(rect.height(), self.minimumHeight())
+        self.resize(width, height)
+        self.move(rect.x(), rect.y())
+        self._suppress_emit = False
 
     def update_translation(self, text: str) -> None:
         self._last_translation = text
@@ -334,6 +353,7 @@ class OcrResultWindow(QtWidgets.QWidget):
                 and self._dragging
             ):
                 self._dragging = False
+                self._emit_geometry()
                 return True
         return super().eventFilter(obj, event)
 
@@ -356,10 +376,24 @@ class OcrResultWindow(QtWidgets.QWidget):
         self._dragging = True
         global_pos = event.globalPosition().toPoint() if hasattr(event, 'globalPosition') else event.globalPos()
         self._drag_offset = global_pos - self.frameGeometry().topLeft()
+        event.accept()
 
     def _continue_drag(self, event: QtGui.QMouseEvent) -> None:
         global_pos = event.globalPosition().toPoint() if hasattr(event, 'globalPosition') else event.globalPos()
         self.move(global_pos - self._drag_offset)
+        event.accept()
+
+    def moveEvent(self, event: QtGui.QMoveEvent) -> None:  # type: ignore[override]
+        super().moveEvent(event)
+        self._emit_geometry()
+
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:  # type: ignore[override]
+        super().resizeEvent(event)
+        self._emit_geometry()
+
+    def _emit_geometry(self) -> None:
+        if not self._suppress_emit:
+            self.geometryUpdated.emit(self.geometry())
 
 class OcrRegionOverlay(QtWidgets.QWidget):
     regionChanged = QtCore.Signal(QtCore.QRect)

@@ -11,7 +11,6 @@ class HotkeyListener:
 
     def __init__(self) -> None:
         self._shutdown = threading.Event()
-        self.on_shutdown: Callable[[], None] | None = None
         self._thread: threading.Thread | None = None
         self._handles: List[int] = []
 
@@ -47,7 +46,6 @@ class HotkeyListener:
 
     def _register_hotkeys(self) -> None:
         self._handles = [
-            keyboard.add_hotkey("alt+shift+q", self._handle_shutdown, suppress=True),
             keyboard.add_hotkey("alt+y", self._handle_toggle_session, suppress=True),
             keyboard.add_hotkey("alt+r", self._handle_toggle_ocr, suppress=True),
             keyboard.add_hotkey("alt+shift+r", self._handle_toggle_ocr_overlay, suppress=True),
@@ -68,8 +66,17 @@ class HotkeyListener:
             self.on_toggle_session()
 
     def _handle_toggle_ocr(self) -> None:
+        if self._shift_active():
+            return
         if self.on_toggle_ocr:
             self.on_toggle_ocr()
+
+    @staticmethod
+    def _shift_active() -> bool:
+        try:
+            return any(keyboard.is_pressed(key) for key in ("shift", "left shift", "right shift"))
+        except RuntimeError:
+            return False
 
     def _handle_toggle_ocr_overlay(self) -> None:
         if self.on_toggle_ocr_overlay:
@@ -89,6 +96,3 @@ class HotkeyListener:
         if text:
             self.on_submit(text, False)
 
-    def _handle_shutdown(self) -> None:
-        if self.on_shutdown:
-            self.on_shutdown()
