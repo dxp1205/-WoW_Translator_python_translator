@@ -31,6 +31,7 @@ logger = logging.getLogger("wow_translator_py")
 class TranslatorController(QtWidgets.QApplication):
     toggleSessionRequested = QtCore.Signal()
     toggleOcrRequested = QtCore.Signal()
+    toggleOcrOverlayRequested = QtCore.Signal()
     showPromptsRequested = QtCore.Signal()
     submissionRequested = QtCore.Signal(str, bool)
 
@@ -88,6 +89,7 @@ class TranslatorController(QtWidgets.QApplication):
 
         self.toggleSessionRequested.connect(self._on_toggle_session)
         self.toggleOcrRequested.connect(self._on_toggle_ocr)
+        self.toggleOcrOverlayRequested.connect(self._on_toggle_ocr_overlay)
         self.showPromptsRequested.connect(self._on_show_prompt_settings)
         self.submissionRequested.connect(self._process_submission)
 
@@ -158,7 +160,7 @@ class TranslatorController(QtWidgets.QApplication):
         self.hotkeys = HotkeyListener()
         self.hotkeys.on_toggle_session = lambda: self.toggleSessionRequested.emit()
         self.hotkeys.on_toggle_ocr = lambda: self.toggleOcrRequested.emit()
-        self.hotkeys.on_toggle_ocr_overlay = lambda: self._on_toggle_ocr_overlay()
+        self.hotkeys.on_toggle_ocr_overlay = lambda: self.toggleOcrOverlayRequested.emit()
         self.hotkeys.on_show_prompts = lambda: self.showPromptsRequested.emit()
         self.hotkeys.on_submit = lambda text, keep: self.submissionRequested.emit(text, keep)
 
