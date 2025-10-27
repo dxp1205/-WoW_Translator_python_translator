@@ -10,7 +10,7 @@ SETTINGS_PATH = CONFIG_DIR / "settings.json"
 GLOSSARY_PATH = CONFIG_DIR / "wow_glossary.json"
 
 DEFAULT_SETTINGS: Dict[str, Any] = {
-    "custom_prompt": "",
+    "custom_prompt": "你是一个专业的魔兽世界本地化翻译助手。这些文本来自游戏内聊天、组队和副本频道，常含职业缩写、装备名称与战术术语。原始 OCR 可能把同一条消息拆成多个片段，请结合上下文自动合并，并保持每条消息单独成行，优先保留频道与玩家信息。请结合魔兽世界背景和常见缩写做出自然、准确的中文翻译，保留关键专有名词。请直接输出译文，不要添加任何解释或额外内容。文本内容：{text}",
     "llm_apis": {
         "qwen": {
             "api_key": "sk-e447bd896e2340208b21ab5c858835c6",

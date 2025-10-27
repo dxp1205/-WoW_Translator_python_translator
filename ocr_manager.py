@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import concurrent.futures
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TYPE_CHECKING
 import hashlib
 
 import re
@@ -21,47 +21,17 @@ from config_manager import ConfigManager
 from translator import QwenTranslator
 from ui import OcrRegionOverlay
 
+if TYPE_CHECKING:
+    from prompt_manager import PromptManager
+    from config_manager import GlossaryManager
+
 _WHITESPACE_RE = re.compile(r"\s+")
 _OPEN_PUNCT = ("(", "[", "{", "\uFF08", "\u3010", "\u300A")
 _CLOSE_PUNCT = (")", "]", "}", "\uFF09", "\u3011", "\u300B")
-_CHANNEL_KEYWORDS = {
-    "general",
-    "trade",
-    "localdefense",
-    "lookingforgroup",
-    "lfg",
-    "world",
-    "guild",
-    "party",
-    "raid",
-    "officer",
-    "instance",
-    "bg",
-    "arena",
-}
-_PREFIX_KEYWORDS = (
-    "guild",
-    "\u516c\u4f1a",
-    "\u961f\u4f0d",
-    "\u7ec4\u961f",
-    "\u56e2\u961f",
-    "\u526f\u672c",
-    "\u4e16\u754c",
-    "\u7efc\u5408",
-    "\u4ea4\u6613",
-    "\u672c\u5730\u9632\u52a1",
-    "\u5bfb\u6c42\u7ec4\u961f",
-    "\u5bc6\u8bed",
-    "\u79c1\u804a",
-    "\u7cfb\u7edf",
-    "\u4f60\u83b7\u5f97",
-    "you receive",
-    "you loot",
-    "you gain",
-    "from",
-    "to",
-)
-
+CHANNEL_TAG_RE = re.compile(r'^\\[\\s*(\\d{1,2}\\.\\s*)?(general|trade|localdefense|lookingforgroup|lfg|world|guild|party|raid|officer|instance|bg|arena|\\u7efc\\u5408|\\u4ea4\\u6613|\\u516c\\u4f1a|\\u961f\\u4f0d|\\u56e2\\u961f|\\u672c\\u5730\\u9632\\u52a1|\\u7cfb\\u7edf)\\b', re.IGNORECASE)
+PLAYER_TAG_RE = re.compile(r'^\\[[^\\]]+\\]\\s*[^:：]{0,32}[:：]', re.IGNORECASE)
+SYSTEM_PREFIX_RE = re.compile(r"^(you(?:'ve)?\\s+(?:receive|received|loot|gain|lose|learn|create|roll)|quest|achievement|auction|system|you are now|\\u4f60\\u83b7\\u5f97|\\u4f60\\u62fe\\u53d6|\\u4f60\\u5931\\u53bb|\\u4f60\\u5b66\\u4f1a|\\u4efb\\u52a1|\\u7cfb\\u7edf|\\u58f0\\u671b|\\u6210\\u5c31)", re.IGNORECASE)
+NAME_COLON_RE = re.compile(r'^[^\\s\\[\\]<>]{2,24}[:：]')
 
 def _normalize_ocr_segment(raw: str) -> str:
     if not raw:
@@ -90,9 +60,20 @@ def _strip_channel_prefix(text: str) -> str:
 
 
 def _is_new_message(text: str) -> bool:
-    stripped = text.lstrip()
+    stripped = text.strip()
     if not stripped:
         return False
+    if CHANNEL_TAG_RE.match(stripped):
+        return True
+    if PLAYER_TAG_RE.match(stripped):
+        return True
+    if SYSTEM_PREFIX_RE.match(stripped):
+        return True
+    if NAME_COLON_RE.match(stripped):
+        return True
+    return False
+
+
 
     if stripped.startswith("["):
         closing = stripped.find("]")
@@ -206,13 +187,15 @@ class OcrController(QtCore.QObject):
     textUpdated = QtCore.Signal(str, str)
     statusUpdated = QtCore.Signal(str)
 
-    def __init__(self, cfg: ConfigManager, translator: QwenTranslator) -> None:
+    def __init__(self, cfg: ConfigManager, translator: QwenTranslator, prompt_manager: 'PromptManager', glossary: 'GlossaryManager') -> None:
         super().__init__()
         if RapidOCR is None:
             raise RuntimeError("未安装 rapidocr-onnxruntime，请使用 --no-ocr 或先安装依赖")
 
         self.cfg = cfg
         self.translator = translator
+        self.prompt_manager = prompt_manager
+        self.glossary = glossary
         self.ocr = RapidOCR()
 
         self._active = False
@@ -430,26 +413,47 @@ class OcrController(QtCore.QObject):
                         raw_segments.append(segment)
 
             messages: list[str] = []
+            pending_fragment: str | None = None
             for segment in raw_segments:
                 cleaned = _normalize_ocr_segment(segment)
                 if not cleaned:
+                    continue
+                if pending_fragment is not None:
+                    cleaned = f"{pending_fragment}{cleaned}"
+                    pending_fragment = None
+                if cleaned.startswith('[') and ']' not in cleaned and len(cleaned) < 24:
+                    pending_fragment = cleaned
+                    continue
+                if cleaned.startswith(']') and messages:
+                    messages[-1] = f"{messages[-1]}{cleaned}".strip()
+                    continue
+                if cleaned.startswith(':') and messages:
+                    messages[-1] = f"{messages[-1]}{cleaned}".strip()
                     continue
                 if _is_new_message(cleaned) or not messages:
                     messages.append(cleaned)
                 else:
                     messages[-1] = f"{messages[-1]} {cleaned}".strip()
 
+            if pending_fragment and messages:
+                messages[-1] = f"{messages[-1]} {pending_fragment}".strip()
+            elif pending_fragment:
+                messages.append(pending_fragment)
+
             text = "\n".join(messages).strip()
             if not text:
                 return "", "", "未识别到文本"
 
+            has_chinese = any('一' <= ch <= '鿿' for ch in text)
+            prompt = self.prompt_manager.get_zh_to_en_prompt() if has_chinese else self.prompt_manager.get_prompt()
+            context = self.last_text
             try:
-                translation = self.translator.translate(
-                    text,
-                    "请将以下魔兽世界聊天、组队或副本文本翻译为自然、准确的中文，结合游戏常识理解职业缩写、装备与战术术语，并保留关键专有名词。请直接输出译文，不要添加任何解释或额外内容：{text}",
-                )
+                translation = self.translator.translate(text, prompt, context)
             except Exception as exc:
-                return text, "", f"翻译失败：{exc}"
+                return text, "", f"翻译失败:{exc}"
+
+            if not has_chinese and self.glossary:
+                translation = self.glossary.translate(translation)
 
             return text, translation, None
         finally:

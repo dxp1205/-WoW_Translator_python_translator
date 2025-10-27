@@ -148,7 +148,7 @@ class TranslatorController(QtWidgets.QApplication):
         self.ocr: OcrController | None = None
         if enable_ocr:
             try:
-                self.ocr = OcrController(self.cfg, self.translator)
+                self.ocr = OcrController(self.cfg, self.translator, self.prompt_manager, self.glossary)
                 self.ocr.textUpdated.connect(self._handle_ocr_update)
                 self.ocr.statusUpdated.connect(self._handle_ocr_status)
             except Exception as exc:  # pylint: disable=broad-except
