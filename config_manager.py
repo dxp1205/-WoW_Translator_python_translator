@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict
 
@@ -254,8 +255,17 @@ class GlossaryManager:
             merged = dict(DEFAULT_GLOSSARY)
         self._terms: Dict[str, str] = merged
         self._sorted_terms = sorted(self._terms.items(), key=lambda kv: len(kv[0]), reverse=True)
+        self._word_patterns = {
+            key: re.compile(rf"\b{re.escape(key)}\b")
+            for key, _ in self._sorted_terms
+            if self._is_word_token(key)
+        }
         if not GLOSSARY_PATH.exists() or not isinstance(glossary, dict):
             save_json(GLOSSARY_PATH, {"glossary": self._terms})
+
+    @staticmethod
+    def _is_word_token(token: str) -> bool:
+        return token.isalnum()
 
     def translate(self, text: str, focus: str | None = None) -> str:
         result = text
@@ -266,7 +276,12 @@ class GlossaryManager:
                 continue
             if focus_lower and focus_lower not in key.lower():
                 continue
-            result = result.replace(key, chinese)
+            if self._is_word_token(key):
+                pattern = self._word_patterns.get(key)
+                if pattern:
+                    result = pattern.sub(chinese, result)
+            else:
+                result = result.replace(key, chinese)
         return result
 
     def get_terms(self) -> Dict[str, str]:

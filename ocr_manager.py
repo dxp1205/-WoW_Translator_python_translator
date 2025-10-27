@@ -284,16 +284,15 @@ class OcrController(QtCore.QObject):
         self._pass_through = not self._pass_through
         if self.overlay:
             self.overlay.set_pass_through(self._pass_through)
-        if self._pass_through:
-            self._timer.stop()
-            self.statusUpdated.emit("Overlay hidden; windows are click-through")
-        else:
-            if self._active:
-                self._timer.start()
-                self._tick()
-            self.statusUpdated.emit("Overlay restored; windows interactive")
-            if self.overlay:
+            if not self._pass_through:
                 self.overlay.raise_()
+        if self._active and not self._timer.isActive():
+            self._timer.start()
+        if not self._pass_through:
+            self._tick()
+            self.statusUpdated.emit("Overlay restored; windows interactive")
+        else:
+            self.statusUpdated.emit("Overlay hidden; OCR running in background")
         return self._pass_through
 
     def _handle_selection(self, rect: QtCore.QRect) -> None:
@@ -344,8 +343,6 @@ class OcrController(QtCore.QObject):
         self._tick()
 
     def _tick(self) -> None:
-        if self._pass_through:
-            return
         if not self._capture_rect or self._pending_future is not None:
             return
         path = self._capture(self._capture_rect)
