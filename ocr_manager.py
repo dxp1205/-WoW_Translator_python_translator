@@ -28,16 +28,52 @@ if TYPE_CHECKING:
 _WHITESPACE_RE = re.compile(r"\s+")
 _OPEN_PUNCT = ("(", "[", "{", "\uFF08", "\u3010", "\u300A")
 _CLOSE_PUNCT = (")", "]", "}", "\uFF09", "\u3011", "\u300B")
+CHANNEL_NAMES = (
+    "general",
+    "trade",
+    "localdefense",
+    "lookingforgroup",
+    "lfg",
+    "world",
+    "guild",
+    "party",
+    "raid",
+    "officer",
+    "instance",
+    "bg",
+    "arena",
+    "综合",
+    "交易",
+    "公会",
+    "队伍",
+    "团队",
+    "本地防务",
+    "系统",
+)
+SYSTEM_PREFIXES = (
+    "you are now",
+    "你获得",
+    "你拾取",
+    "你失去",
+    "你学会",
+    "任务",
+    "系统",
+    "声望",
+    "成就",
+)
+CHANNEL_PATTERN = "|".join(re.escape(name) for name in CHANNEL_NAMES)
+SYSTEM_PREFIX_PATTERN = "|".join(re.escape(prefix) for prefix in SYSTEM_PREFIXES)
 CHANNEL_TAG_RE = re.compile(
-    r'^\[\s*(\d{1,2}\.\s*)?(?:general|trade|localdefense|lookingforgroup|lfg|world|guild|party|raid|officer|instance|bg|arena|综合|交易|公会|队伍|团队|本地防务|系统)\b',
+    rf"^\[\s*(\d{{1,2}}\.\s*)?(?:{CHANNEL_PATTERN})\b",
     re.IGNORECASE,
 )
-PLAYER_TAG_RE = re.compile(r'^\[[^\]]+\]\s*[^:：]{0,32}[:：]', re.IGNORECASE)
+PLAYER_TAG_RE = re.compile(r"^\[[^\]]+\]\s*[^:：]{0,32}[:：]", re.IGNORECASE)
 SYSTEM_PREFIX_RE = re.compile(
-    r"^(you(?:'ve)?\s+(?:receive|received|loot|gain|lose|learn|create|roll)|quest|achievement|auction|system|you are now|你获得|你拾取|你失去|你学会|任务|系统|声望|成就)",
+    rf"^(you(?:'ve)?\s+(?:receive|received|loot|gain|lose|learn|create|roll)|{SYSTEM_PREFIX_PATTERN})",
     re.IGNORECASE,
 )
 NAME_COLON_RE = re.compile(r'^[^\s\[\]<>]{2,24}[:：]')
+
 
 def _normalize_ocr_segment(raw: str) -> str:
     if not raw:
@@ -220,6 +256,7 @@ class OcrController(QtCore.QObject):
         self.overlay: Optional[OcrRegionOverlay] = None
 
         self._pass_through = False
+        self._last_capture_hash: Optional[str] = None
         self.last_text: str = ""
         self._last_translation: str = ""
 
@@ -248,6 +285,7 @@ class OcrController(QtCore.QObject):
         self._pass_through = False
         self._capture_rect = None
         self._capture_token += 1
+        self._last_capture_hash = None
         self.statusUpdated.emit("OCR 已停止")
 
     def is_active(self) -> bool:
@@ -271,6 +309,7 @@ class OcrController(QtCore.QObject):
             self.statusUpdated.emit("OCR inactive; cannot hide region")
             return self._pass_through
         self._pass_through = not self._pass_through
+        self._last_capture_hash = None
         if self.overlay:
             self.overlay.set_pass_through(self._pass_through)
             if not self._pass_through:
@@ -292,6 +331,7 @@ class OcrController(QtCore.QObject):
     def _activate_with_region(self, rect: QtCore.QRect) -> None:
         self._capture_rect = QtCore.QRect(rect)
         self._capture_token += 1
+        self._last_capture_hash = None
         if self._pending_future:
             self._pending_future.cancel()
             self._pending_future = None
@@ -308,9 +348,6 @@ class OcrController(QtCore.QObject):
         self._pass_through = False
         self.overlay.set_pass_through(False)
 
-        self._pass_through = False
-        self.overlay.set_pass_through(False)
-
         self._active = True
         self.statusUpdated.emit("OCR active")
         self.last_text = ""
@@ -322,6 +359,7 @@ class OcrController(QtCore.QObject):
         self._capture_rect = QtCore.QRect(rect)
         self._save_region(rect)
         self._capture_token += 1
+        self._last_capture_hash = None
         if self._pending_future:
             self._pending_future.cancel()
             self._pending_future = None
@@ -436,6 +474,12 @@ class OcrController(QtCore.QObject):
                 if cleaned.startswith(':') and messages:
                     messages[-1] = f"{messages[-1]}{cleaned}".strip()
                     continue
+                if messages and CHANNEL_TAG_RE.match(messages[-1]) and PLAYER_TAG_RE.match(cleaned):
+                    messages[-1] = f"{messages[-1]} {cleaned}".strip()
+                    continue
+                if messages and SYSTEM_PREFIX_RE.match(cleaned) and not CHANNEL_TAG_RE.match(cleaned):
+                    messages[-1] = f"{messages[-1]} {cleaned}".strip()
+                    continue
                 if _is_new_message(cleaned) or not messages:
                     messages.append(cleaned)
                 else:
@@ -480,13 +524,17 @@ class OcrController(QtCore.QObject):
             output_dir.mkdir(parents=True, exist_ok=True)
         except OSError:
             return None
-        file_path = output_dir / f"wow_translator_{QtCore.QDateTime.currentMSecsSinceEpoch()}.png"
         try:
             with mss.mss() as grabber:
                 shot = grabber.grab(monitor)
-                tools.to_png(shot.rgb, shot.size, output=str(file_path))
         except mss.exception.ScreenShotError:
             return None
+        digest = hashlib.sha1(memoryview(shot.rgb)[::32]).hexdigest()
+        if digest == self._last_capture_hash:
+            return None
+        file_path = output_dir / f"wow_translator_{QtCore.QDateTime.currentMSecsSinceEpoch()}.png"
+        tools.to_png(shot.rgb, shot.size, output=str(file_path))
+        self._last_capture_hash = digest
         return str(file_path)
 
     def _rect_to_monitor(self, rect: QtCore.QRect) -> Optional[dict[str, int]]:
