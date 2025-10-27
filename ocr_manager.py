@@ -28,10 +28,16 @@ if TYPE_CHECKING:
 _WHITESPACE_RE = re.compile(r"\s+")
 _OPEN_PUNCT = ("(", "[", "{", "\uFF08", "\u3010", "\u300A")
 _CLOSE_PUNCT = (")", "]", "}", "\uFF09", "\u3011", "\u300B")
-CHANNEL_TAG_RE = re.compile(r'^\\[\\s*(\\d{1,2}\\.\\s*)?(general|trade|localdefense|lookingforgroup|lfg|world|guild|party|raid|officer|instance|bg|arena|\\u7efc\\u5408|\\u4ea4\\u6613|\\u516c\\u4f1a|\\u961f\\u4f0d|\\u56e2\\u961f|\\u672c\\u5730\\u9632\\u52a1|\\u7cfb\\u7edf)\\b', re.IGNORECASE)
-PLAYER_TAG_RE = re.compile(r'^\\[[^\\]]+\\]\\s*[^:：]{0,32}[:：]', re.IGNORECASE)
-SYSTEM_PREFIX_RE = re.compile(r"^(you(?:'ve)?\\s+(?:receive|received|loot|gain|lose|learn|create|roll)|quest|achievement|auction|system|you are now|\\u4f60\\u83b7\\u5f97|\\u4f60\\u62fe\\u53d6|\\u4f60\\u5931\\u53bb|\\u4f60\\u5b66\\u4f1a|\\u4efb\\u52a1|\\u7cfb\\u7edf|\\u58f0\\u671b|\\u6210\\u5c31)", re.IGNORECASE)
-NAME_COLON_RE = re.compile(r'^[^\\s\\[\\]<>]{2,24}[:：]')
+CHANNEL_TAG_RE = re.compile(
+    r'^\[\s*(\d{1,2}\.\s*)?(?:general|trade|localdefense|lookingforgroup|lfg|world|guild|party|raid|officer|instance|bg|arena|综合|交易|公会|队伍|团队|本地防务|系统)\b',
+    re.IGNORECASE,
+)
+PLAYER_TAG_RE = re.compile(r'^\[[^\]]+\]\s*[^:：]{0,32}[:：]', re.IGNORECASE)
+SYSTEM_PREFIX_RE = re.compile(
+    r"^(you(?:'ve)?\s+(?:receive|received|loot|gain|lose|learn|create|roll)|quest|achievement|auction|system|you are now|你获得|你拾取|你失去|你学会|任务|系统|声望|成就)",
+    re.IGNORECASE,
+)
+NAME_COLON_RE = re.compile(r'^[^\s\[\]<>]{2,24}[:：]')
 
 def _normalize_ocr_segment(raw: str) -> str:
     if not raw:
@@ -403,7 +409,7 @@ class OcrController(QtCore.QObject):
                 Path(path).unlink(missing_ok=True)
             except Exception:
                 pass
-            return "", "", "识别失败"
+            return "", "", "未识别到文本"
 
         try:
             raw_segments: list[str] = []
@@ -444,7 +450,7 @@ class OcrController(QtCore.QObject):
             if not text:
                 return "", "", "未识别到文本"
 
-            has_chinese = any('一' <= ch <= '鿿' for ch in text)
+            has_chinese = any('\u4e00' <= ch <= '\u9fff' for ch in text)
             prompt = self.prompt_manager.get_zh_to_en_prompt() if has_chinese else self.prompt_manager.get_prompt()
             context = self.last_text
             try:
